@@ -42,28 +42,59 @@ export default function Dashboard() {
     }
 
     try {
+      console.log('🔧 Starting URL shortening process...');
+      console.log('📝 Current user:', currentUser?.uid);
+      console.log('🔗 Original URL:', newLink);
+      
       // Generate a more reliable short code
       const shortCode = Math.random().toString(36).substring(2, 8).toLowerCase();
+      console.log('🎯 Generated shortCode:', shortCode);
       
       // Ensure URL has proper protocol
       let processedUrl = newLink.trim();
       if (!processedUrl.startsWith('http://') && !processedUrl.startsWith('https://')) {
         processedUrl = 'https://' + processedUrl;
       }
+      console.log('✅ Processed URL:', processedUrl);
       
-      await addDoc(collection(db, 'links'), {
+      const linkData = {
         originalUrl: processedUrl,
         shortCode,
         clicks: 0,
         userId: currentUser.uid,
         createdAt: serverTimestamp(),
-      });
+      };
+      
+      console.log('📤 Attempting to write to Firestore:', linkData);
+      
+      const docRef = await addDoc(collection(db, 'links'), linkData);
+      
+      console.log('✅ Successfully created document with ID:', docRef.id);
       
       setNewLink('');
       setError('');
     } catch (dbError) {
-      console.error('Database error:', dbError);
-      setError('Failed to create short link. Please try again.');
+      console.error('❌ Database error details:', {
+        name: dbError.name,
+        message: dbError.message,
+        code: dbError.code,
+        stack: dbError.stack
+      });
+      
+      // Show more specific error messages
+      let errorMessage = 'Failed to create short link. ';
+      
+      if (dbError.code === 'permission-denied') {
+        errorMessage += 'Permission denied. Please check Firestore security rules.';
+      } else if (dbError.code === 'unavailable') {
+        errorMessage += 'Firestore service is unavailable. Please try again later.';
+      } else if (dbError.code === 'unauthenticated') {
+        errorMessage += 'User not authenticated. Please log in again.';
+      } else {
+        errorMessage += 'Error: ' + dbError.message;
+      }
+      
+      setError(errorMessage);
     }
   };
 
