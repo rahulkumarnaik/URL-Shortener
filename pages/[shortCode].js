@@ -1,71 +1,125 @@
 import { collection, query, where, getDocs, updateDoc, doc, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import Link from 'next/link';
 
 // This function runs on the server for every request to this page.
 export async function getServerSideProps(context) {
   const { shortCode } = context.params;
-  const linksCollection = collection(db, 'links');
-  const q = query(linksCollection, where('shortCode', '==', shortCode));
+  
+  console.log('🔍 Looking for shortCode:', shortCode);
+  
+  if (!shortCode) {
+    console.log('❌ No shortCode provided');
+    return { notFound: true };
+  }
   
   try {
+    const linksCollection = collection(db, 'links');
+    const q = query(linksCollection, where('shortCode', '==', shortCode.toLowerCase()));
+    
+    console.log('🔍 Querying database for shortCode:', shortCode.toLowerCase());
     const querySnapshot = await getDocs(q);
+    console.log('📊 Query results - found docs:', querySnapshot.size);
 
     if (querySnapshot.empty) {
-      // If no link is found, return a 404 page.
-      return { notFound: true };
+      console.log('❌ No link found for shortCode:', shortCode);
+      return { 
+        props: { 
+          shortCode, 
+          error: 'Link not found' 
+        }
+      };
     }
 
     const linkDoc = querySnapshot.docs[0];
     const linkData = linkDoc.data();
     const linkId = linkDoc.id;
+    
+    console.log('✅ Found link:', {
+      id: linkId,
+      originalUrl: linkData.originalUrl,
+      shortCode: linkData.shortCode,
+      clicks: linkData.clicks
+    });
 
     // Increment the click count in Firestore.
-    const linkRef = doc(db, 'links', linkId);
-    await updateDoc(linkRef, {
-      clicks: increment(1),
-    });
+    try {
+      const linkRef = doc(db, 'links', linkId);
+      await updateDoc(linkRef, {
+        clicks: increment(1),
+      });
+      console.log('📈 Click count incremented for:', shortCode);
+    } catch (updateError) {
+      console.error('❌ Failed to update click count:', updateError);
+      // Don't fail the redirect if click counting fails
+    }
+
+    // Ensure the URL has a proper protocol
+    let destination = linkData.originalUrl;
+    if (!destination.startsWith('http://') && !destination.startsWith('https://')) {
+      destination = 'https://' + destination;
+    }
+    
+    console.log('🔀 Redirecting to:', destination);
 
     // Redirect the user to the original URL.
     return {
       redirect: {
-        destination: linkData.originalUrl,
+        destination: destination,
         permanent: false, // Use a temporary redirect.
       },
     };
   } catch (error) {
-    console.error("Error fetching short link:", error);
-    return { notFound: true };
+    console.error('❌ Error in getServerSideProps:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+    
+    return { 
+      props: { 
+        shortCode, 
+        error: 'Database connection error' 
+      }
+    };
   }
 }
 
-// This component is not rendered because the user is always redirected.
-export default function ShortCodePage() {
-  return null;
+// This component handles cases where redirect fails or shows loading state
+export default function ShortCodePage({ shortCode, error }) {
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="mb-8">
+            <div className="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">Link Not Found</h1>
+            <p className="text-gray-400 mb-6">The shortened URL you&apos;re looking for doesn&apos;t exist or has been removed.</p>
+            <Link href="/">
+              <span className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer">
+                Go Home
+              </span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
+        <p className="text-gray-400">Redirecting...</p>
+      </div>
+    </div>
+  );
 }
 
 
-// =======================================================================
-// FOLDER: pages
-// FILE: index.js
-// =======================================================================
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/router';
-import { useAuth } from '../context/AuthContext';
-
-export default function Home() {
-  const { currentUser } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    // This effect redirects the user based on their login status.
-    if (currentUser) {
-      router.push('/dashboard'); // If logged in, go to dashboard.
-    } else {
-      router.push('/login'); // If not logged in, go to login page.
-    }
-  }, [currentUser, router]);
-
-  // Render a loading state while redirecting.
-  return <div className="flex items-center justify-center h-screen">Loading...</div>;
-}
