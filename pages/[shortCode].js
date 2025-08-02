@@ -21,15 +21,51 @@ export async function getServerSideProps(context) {
   }
   
   try {
+    console.log('🔍 Initializing Firestore connection...');
     const linksCollection = collection(db, 'links');
-    const q = query(linksCollection, where('shortCode', '==', shortCode.toLowerCase()));
+    console.log('📚 Collection reference created');
     
-    console.log('🔍 Querying database for shortCode:', shortCode.toLowerCase());
+    // Try both original case and lowercase
+    const shortCodeLower = shortCode.toLowerCase();
+    console.log('🔍 Searching for shortCode (original):', shortCode);
+    console.log('🔍 Searching for shortCode (lowercase):', shortCodeLower);
+    
+    const q = query(linksCollection, where('shortCode', '==', shortCodeLower));
+    console.log('🔍 Query created, executing...');
+    
     const querySnapshot = await getDocs(q);
+    console.log('📊 Query completed, found documents:', querySnapshot.size);
+    
     if (querySnapshot.size > 0) {
-      console.log('✅ Document found:', querySnapshot.docs.map(doc => doc.data()));
+      console.log('✅ Document(s) found:');
+      querySnapshot.docs.forEach((doc, index) => {
+        const data = doc.data();
+        console.log(`Document ${index + 1}:`, {
+          id: doc.id,
+          shortCode: data.shortCode,
+          originalUrl: data.originalUrl,
+          userId: data.userId,
+          clicks: data.clicks
+        });
+      });
+    } else {
+      console.log('❌ No documents found with shortCode:', shortCodeLower);
+      // Try to query all documents to see if there are any in the collection
+      try {
+        const allDocsQuery = query(linksCollection);
+        const allDocs = await getDocs(allDocsQuery);
+        console.log('📊 Total documents in collection:', allDocs.size);
+        if (allDocs.size > 0) {
+          console.log('🔍 Sample shortCodes in collection:');
+          allDocs.docs.slice(0, 5).forEach((doc, index) => {
+            const data = doc.data();
+            console.log(`Sample ${index + 1}: shortCode = '${data.shortCode}'`);
+          });
+        }
+      } catch (allDocsError) {
+        console.error('❌ Error querying all documents:', allDocsError);
+      }
     }
-    console.log('📊 Query returned documents:', querySnapshot.size);
 
     if (querySnapshot.empty) {
       console.log('❌ No link found for shortCode:', shortCode);
