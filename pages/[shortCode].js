@@ -6,7 +6,14 @@ import Link from 'next/link';
 export async function getServerSideProps(context) {
   const { shortCode } = context.params;
   
-  console.log('🔍 Looking for shortCode:', shortCode);
+  console.log('🔍 Starting redirect process for shortCode:', shortCode);
+  console.log('🗄 Querying database collection: links');
+  try {
+    console.log('🌐 Firestore collection path:', 'links');
+    console.log('🔑 Query shortCode:', shortCode.toLowerCase());
+  } catch (error) {
+    console.error('⚠️ Error forming query:', error);
+  }
   
   if (!shortCode) {
     console.log('❌ No shortCode provided');
@@ -19,7 +26,10 @@ export async function getServerSideProps(context) {
     
     console.log('🔍 Querying database for shortCode:', shortCode.toLowerCase());
     const querySnapshot = await getDocs(q);
-    console.log('📊 Query results - found docs:', querySnapshot.size);
+    if (querySnapshot.size > 0) {
+      console.log('✅ Document found:', querySnapshot.docs.map(doc => doc.data()));
+    }
+    console.log('📊 Query returned documents:', querySnapshot.size);
 
     if (querySnapshot.empty) {
       console.log('❌ No link found for shortCode:', shortCode);
